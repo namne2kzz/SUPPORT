@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>SUPPORT.Api</RootNamespace>
+    <UserSecretsId>support-nmate-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Program.cs uses top-level statements, so the generated Program class is internal.
+         WebApplicationFactory<Program> needs to see it to boot the real API in-process. -->
+    <InternalsVisibleTo Include="SUPPORT.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SUPPORT.Application\SUPPORT.Application.csproj" />
+    <ProjectReference Include="..\SUPPORT.Infrastructure\SUPPORT.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

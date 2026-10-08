@@ -1,0 +1,27 @@
+# ── Secrets & local overrides — NEVER commit ───────────────────────────────
+.env
+.env.local
+.env.*.local
+.claude/settings.local.json
+
+# ── .NET dev/local appsettings (may contain real credentials) ───────────────
+**/appsettings.Development.json
+**/appsettings.Local.json
+*.pubxml
+*.pubxml.user
+
+# ── .NET build outputs ──────────────────────────────────────────────────────
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+logs/
+
+# ── IDE / tooling ───────────────────────────────────────────────────────────
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo

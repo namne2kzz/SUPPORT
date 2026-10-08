@@ -1,0 +1,28 @@
+# Backing services for local SUPPORT (NMate) development.
+# Run:   docker compose up -d        (start in background)
+# Reset: docker compose down -v       (wipe the vector database)
+#
+# The API itself runs natively: `dotnet run --project src/SUPPORT.Api` (http://localhost:5160).
+# The LLM is Gemini (cloud API) — there is no model container.
+
+services:
+  pgvector:
+    image: pgvector/pgvector:pg17
+    container_name: support-pgvector
+    environment:
+      POSTGRES_USER: "${SUPPORT_PG_USER:-support}"
+      POSTGRES_PASSWORD: "${SUPPORT_PG_PASSWORD}"
+      POSTGRES_DB: support
+    ports:
+      - "5433:5432"   # 5432 is taken by hub-postgres
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SUPPORT_PG_USER:-support}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgvector-data:
