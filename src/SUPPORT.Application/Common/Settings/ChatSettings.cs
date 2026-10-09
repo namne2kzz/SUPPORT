@@ -19,7 +19,11 @@ public sealed class ChatSettings
     /// Below this best cosine similarity — and with no full-text hit — NMate answers "no documentation"
     /// without calling the model at all. Tune against the eval set.
     /// </summary>
-    public float MinCosineSimilarity { get; set; } = 0.45f;
+    /// <remarks>
+    /// Gemini embeddings sit on a high baseline: first real run (2026-10-09) scored on-topic questions ≈ 0.80 and an
+    /// unrelated one ("thời tiết Hà Nội") ≈ 0.50, so the original 0.45 let off-topic questions through to the model.
+    /// </remarks>
+    public float MinCosineSimilarity { get; set; } = 0.60f;
 
     /// <summary>Answer used when retrieval found nothing relevant.</summary>
     public string NoAnswerText { get; set; } =

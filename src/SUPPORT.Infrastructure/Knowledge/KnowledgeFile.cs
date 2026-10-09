@@ -11,7 +11,7 @@ namespace SUPPORT.Infrastructure.Knowledge;
 /// <param name="Route">Front-end route the document describes.</param>
 /// <param name="Suggestions">Starter questions.</param>
 /// <param name="Body">Markdown after the front-matter.</param>
-/// <param name="ContentHash">SHA-256 (hex) of the whole raw file, front-matter included.</param>
+/// <param name="ContentHash">SHA-256 (hex) of the whole file with line endings normalized, front-matter included.</param>
 internal sealed record KnowledgeFile(
     string SourceKey,
     string Title,

@@ -33,6 +33,9 @@ public sealed class SupportApiFactory(PostgresFixture fixture, string knowledgeR
         builder.UseSetting("Knowledge:Sources:dashboard", knowledgeRoot);
         builder.UseSetting("Knowledge:IngestOnStartup", "false");
         builder.UseSetting("Database:MigrateOnStartup", "false");
+        // The threshold is a calibration of the embedding model. The bag-of-words fake scores on-topic questions
+        // around 0.3–0.5 (Gemini: ≈ 0.8), so it needs its own value; off-topic still scores ≈ 0.
+        builder.UseSetting("Chat:MinCosineSimilarity", "0.3");
 
         builder.ConfigureServices(services =>
         {

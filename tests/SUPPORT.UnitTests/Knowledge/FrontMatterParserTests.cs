@@ -39,7 +39,8 @@ public sealed class FrontMatterParserTests
     [Fact]
     public void Parse_WithoutKey_DerivesKeyFromPath()
     {
-        var raw = Valid.Replace("key: guides/sprints\n", "").Replace("key: guides/sprints\r\n", "");
+        // Normalize first: with git autocrlf the source file (and so this raw literal) may be CRLF.
+        var raw = Valid.ReplaceLineEndings("\n").Replace("key: guides/sprints\n", "");
 
         FrontMatterParser.Parse(@"Guides\Sprints.md", raw).SourceKey.ShouldBe("guides/sprints");
     }
@@ -47,7 +48,12 @@ public sealed class FrontMatterParserTests
     [Fact]
     public void Parse_CrLfLineEndings_AreAccepted()
     {
-        FrontMatterParser.Parse("a.md", Valid.Replace("\n", "\r\n")).Title.ShouldBe("Quản lý Sprint");
+        var crlf = FrontMatterParser.Parse("a.md", Valid.ReplaceLineEndings("\r\n"));
+        var lf = FrontMatterParser.Parse("a.md", Valid.ReplaceLineEndings("\n"));
+
+        crlf.Title.ShouldBe("Quản lý Sprint");
+        crlf.Body.ShouldBe(lf.Body);
+        crlf.ContentHash.ShouldBe(lf.ContentHash, "a line-ending flip must not trigger a re-embed");
     }
 
     [Theory]

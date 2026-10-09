@@ -49,7 +49,7 @@ internal static partial class MarkdownChunker
         var buffer = new StringBuilder();
         var inCodeFence = false;
 
-        foreach (var line in body.Replace("\r\n", "\n").Split('\n'))
+        foreach (var line in body.ReplaceLineEndings("\n").Split('\n'))
         {
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal)) inCodeFence = !inCodeFence;
 

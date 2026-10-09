@@ -23,7 +23,8 @@ internal static class FrontMatterParser
     /// <exception cref="FormatException">Front-matter is missing, malformed, or lacks <c>title</c>/<c>module</c>.</exception>
     public static KnowledgeFile Parse(string relativePath, string raw)
     {
-        var text = raw.Replace("\r\n", "\n").TrimStart('﻿');
+        // ReplaceLineEndings handles CRLF (Windows / git autocrlf), LF and stray CR alike.
+        var text = raw.ReplaceLineEndings("\n").TrimStart('﻿');
         if (!text.StartsWith(Fence + "\n", StringComparison.Ordinal))
             throw new FormatException("File must start with a '---' front-matter block.");
 
@@ -60,7 +61,9 @@ internal static class FrontMatterParser
             Route: string.IsNullOrWhiteSpace(meta.Route) ? null : meta.Route.Trim(),
             Suggestions: meta.Suggestions ?? [],
             Body: body,
-            ContentHash: Hash(raw));
+            // Hash the normalized text, not the raw bytes: a git checkout flipping LF/CRLF must not count as
+            // a content change and re-embed every file (that would spend free-tier quota for nothing).
+            ContentHash: Hash(text));
     }
 
     /// <summary><c>guides\Sprints.md</c> → <c>guides/sprints</c>.</summary>

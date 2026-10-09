@@ -13,7 +13,12 @@ namespace SUPPORT.Api.Controllers.Internal;
 [Route("internal/v1/chat")]
 public sealed class ChatController(IMediator mediator) : ControllerBase
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    // Relaxed escaping keeps Vietnamese readable ("đóng" instead of "đóng"): smaller frames and
+    // debuggable streams. Safe here — the payload is consumed by JSON.parse, never inlined into HTML.
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     /// <summary>Asks a question; the response is <c>text/event-stream</c> with meta → delta… → citations → done (or error).</summary>
     /// <param name="request">Question and page context.</param>
