@@ -1,0 +1,39 @@
+### NMate internal API — manual testing (VS Code REST Client / Rider / Visual Studio)
+# Token: dotnet user-secrets --project src/SUPPORT.Api list   → InternalClients:0:Token
+@host = http://localhost:5160
+@token = paste-InternalClients:0:Token-here
+@user = 11111111-1111-1111-1111-111111111111
+@org = 22222222-2222-2222-2222-222222222222
+
+### Health (no token)
+GET {{host}}/health/ready
+
+### Status — never calls Gemini
+GET {{host}}/internal/v1/status
+X-Internal-Token: {{token}}
+
+### Re-index DASHBOARD/Knowledge (costs embedding quota only for changed files)
+POST {{host}}/internal/v1/knowledge/reindex
+X-Internal-Token: {{token}}
+
+### Suggestions for a screen
+GET {{host}}/internal/v1/suggestions?route=/acme/DASH/sprint-planning
+X-Internal-Token: {{token}}
+
+### Ask (server-sent events)
+POST {{host}}/internal/v1/chat
+X-Internal-Token: {{token}}
+X-User-Id: {{user}}
+X-Org-Id: {{org}}
+Content-Type: application/json
+
+{
+  "message": "Vì sao tôi không tạo được sprint?",
+  "context": { "route": "/acme/DASH/sprint-planning" }
+}
+
+### My conversations
+GET {{host}}/internal/v1/conversations
+X-Internal-Token: {{token}}
+X-User-Id: {{user}}
+X-Org-Id: {{org}}
