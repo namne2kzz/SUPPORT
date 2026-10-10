@@ -88,6 +88,7 @@ internal sealed class KnowledgeIngestionService(
         await db.SaveChangesAsync(ct);
 
         var skipped = new List<string>();
+        var pending = new List<PendingDocument>();
         try
         {
             // Projection only: whether each stored document is current, without pulling its embeddings into memory.
@@ -134,27 +135,16 @@ internal sealed class KnowledgeIngestionService(
                     && current.StaleChunks == 0)
                     continue;
 
-                var chunks = await BuildChunksAsync(file, ct);
-                var metadata = new KnowledgeDocumentMetadata(
-                    file.SourceType, file.Title, file.Module, file.Language, file.Route, file.Suggestions, file.ContentHash);
+                pending.Add(new PendingDocument(file, Chunk(file), current?.Id));
 
-                var document = current is null
-                    ? null
-                    : await db.KnowledgeDocuments.Include(d => d.Chunks).SingleAsync(d => d.Id == current.Id, ct);
-
-                if (document is null)
-                {
-                    document = KnowledgeDocument.Create(product, null, file.SourceKey, metadata);
-                    db.KnowledgeDocuments.Add(document);
-                }
-
-                // Old chunks are orphaned and deleted, new ones inserted — one SaveChanges, so one transaction.
-                document.Reindex(metadata, chunks);
-                run.CountChanged(chunks.Count);
-                await db.SaveChangesAsync(ct);
-                db.ChangeTracker.Clear();
-                db.Attach(run);
+                // Embedding requests are what the free tier counts, so changed documents are pooled until they fill
+                // a batch rather than costing one request each. Flushing per batch (not once at the end) keeps
+                // partial progress: if the quota runs out mid-run, every batch already embedded is saved.
+                if (pending.Sum(p => p.Chunks.Count) >= embeddings.BatchSize)
+                    await FlushAsync(db, run, product, pending, ct);
             }
+
+            await FlushAsync(db, run, product, pending, ct);
 
             var vanished = stored.Values
                 .Where(d => d.Status == KnowledgeDocumentStatus.Active && !seen.Contains(d.SourceKey))
@@ -189,18 +179,62 @@ internal sealed class KnowledgeIngestionService(
         }
     }
 
-    private async Task<IReadOnlyList<KnowledgeChunkDraft>> BuildChunksAsync(KnowledgeFile file, CancellationToken ct)
+    private IReadOnlyList<TextChunk> Chunk(KnowledgeFile file) =>
+        MarkdownChunker.Chunk(file.Body, file.Title,
+            new ChunkingOptions(_settings.MaxChunkTokens, _settings.TargetChunkTokens, _settings.OverlapTokens));
+
+    /// <summary>
+    /// Embeds every pending document's chunks in as few requests as possible, then saves each document in its own
+    /// transaction (old chunks deleted, new ones inserted). Clears <paramref name="pending"/>.
+    /// </summary>
+    private async Task FlushAsync(
+        SupportDbContext db, IngestionRun run, string product, List<PendingDocument> pending, CancellationToken ct)
     {
-        var options = new ChunkingOptions(_settings.MaxChunkTokens, _settings.TargetChunkTokens, _settings.OverlapTokens);
-        var chunks = MarkdownChunker.Chunk(file.Body, file.Title, options);
+        if (pending.Count == 0) return;
 
         // The breadcrumb travels with the text being embedded: a short chunk like "Chúng quay về backlog."
         // only becomes findable once it carries "Quản lý Sprint › Đóng sprint" with it.
-        var vectors = await embeddings.EmbedAsync(
-            [.. chunks.Select(c => $"{file.Title}{MarkdownChunker.PathSeparator}{c.HeadingPath}\n\n{c.Content}")], ct);
+        var texts = pending
+            .SelectMany(p => p.Chunks.Select(c => $"{p.File.Title}{MarkdownChunker.PathSeparator}{c.HeadingPath}\n\n{c.Content}"))
+            .ToList();
+        var vectors = await embeddings.EmbedAsync(texts, ct);
 
-        return [.. chunks.Select((c, i) => new KnowledgeChunkDraft(c.HeadingPath, c.Content, c.TokenCount, vectors[i], embeddings.ModelId))];
+        var offset = 0;
+        foreach (var (file, chunks, existingId) in pending)
+        {
+            var drafts = chunks
+                .Select((c, i) => new KnowledgeChunkDraft(c.HeadingPath, c.Content, c.TokenCount, vectors[offset + i], embeddings.ModelId))
+                .ToList();
+            offset += chunks.Count;
+
+            var metadata = new KnowledgeDocumentMetadata(
+                file.SourceType, file.Title, file.Module, file.Language, file.Route, file.Suggestions, file.ContentHash);
+
+            var document = existingId is null
+                ? null
+                : await db.KnowledgeDocuments.Include(d => d.Chunks).SingleAsync(d => d.Id == existingId, ct);
+            if (document is null)
+            {
+                document = KnowledgeDocument.Create(product, null, file.SourceKey, metadata);
+                db.KnowledgeDocuments.Add(document);
+            }
+
+            // Old chunks are orphaned and deleted, new ones inserted — one SaveChanges, so one transaction.
+            document.Reindex(metadata, drafts);
+            run.CountChanged(drafts.Count);
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+            db.Attach(run);
+        }
+
+        pending.Clear();
     }
+
+    /// <summary>A changed document waiting for its chunks to be embedded.</summary>
+    /// <param name="File">Parsed source file.</param>
+    /// <param name="Chunks">Its chunks, in order.</param>
+    /// <param name="ExistingId">Stored document to re-index, or null for a new one.</param>
+    private sealed record PendingDocument(KnowledgeFile File, IReadOnlyList<TextChunk> Chunks, Guid? ExistingId);
 
     /// <inheritdoc />
     public override void Dispose()

@@ -19,6 +19,9 @@ internal sealed class EmbeddingService(IEmbeddingGenerator<string, Embedding<flo
     /// <summary>Whether an API key is configured.</summary>
     public bool IsConfigured => _settings.IsConfigured;
 
+    /// <summary>Texts sent per embedding request.</summary>
+    public int BatchSize => Math.Max(1, _settings.EmbeddingBatchSize);
+
     /// <summary>Embeds texts in batches of <see cref="LlmSettings.EmbeddingBatchSize"/>.</summary>
     /// <param name="texts">Texts to embed.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -29,7 +32,7 @@ internal sealed class EmbeddingService(IEmbeddingGenerator<string, Embedding<flo
         var options = new EmbeddingGenerationOptions { Dimensions = _settings.EmbeddingDimensions };
         var vectors = new List<float[]>(texts.Count);
 
-        foreach (var batch in texts.Chunk(Math.Max(1, _settings.EmbeddingBatchSize)))
+        foreach (var batch in texts.Chunk(BatchSize))
         {
             GeneratedEmbeddings<Embedding<float>> result;
             try

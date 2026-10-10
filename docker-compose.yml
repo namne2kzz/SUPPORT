@@ -24,5 +24,28 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Web DB admin for the NMate database → http://localhost:8048 (DASHBOARD's own DbGate stays on 8047).
+  dbgate:
+    image: dbgate/dbgate:latest
+    container_name: support-dbgate
+    ports:
+      - "8048:3000"
+    environment:
+      CONNECTIONS: con1
+      LABEL_con1: "NMate (PostgreSQL + pgvector)"
+      SERVER_con1: pgvector
+      PORT_con1: 5432
+      USER_con1: "${SUPPORT_PG_USER:-support}"
+      PASSWORD_con1: "${SUPPORT_PG_PASSWORD}"
+      DATABASE_con1: support
+      ENGINE_con1: postgres@dbgate-plugin-postgres
+    volumes:
+      - dbgate-data:/root/.dbgate
+    depends_on:
+      pgvector:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgvector-data:
+  dbgate-data:

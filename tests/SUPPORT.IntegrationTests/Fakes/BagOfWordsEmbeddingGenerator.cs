@@ -13,11 +13,22 @@ public sealed class BagOfWordsEmbeddingGenerator(int dimensions = 768) : IEmbedd
     /// <summary>Number of texts embedded so far (to assert caching / skipping).</summary>
     public int EmbeddedTexts { get; private set; }
 
+    /// <summary>Number of provider requests made so far (what the free tier counts).</summary>
+    public int Requests { get; private set; }
+
+    /// <summary>When set, the request with this 1-based number fails as if the quota ran out.</summary>
+    public int? FailOnRequest { get; set; }
+
     /// <inheritdoc />
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
         IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
     {
-        var embeddings = values.Select(v =>
+        Requests++;
+        if (Requests == FailOnRequest)
+            throw new SUPPORT.Application.Common.Exceptions.AssistantUnavailableException(
+                SUPPORT.Application.Common.Exceptions.AssistantErrorCodes.QuotaExceeded, "quota");
+
+        var embeddings = values.ToList().Select(v =>
         {
             EmbeddedTexts++;
             var vector = new float[dimensions];

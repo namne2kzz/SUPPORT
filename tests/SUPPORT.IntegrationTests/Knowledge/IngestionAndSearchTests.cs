@@ -49,6 +49,37 @@ public sealed class IngestionAndSearchTests(PostgresFixture fixture) : IDisposab
     }
 
     [Fact]
+    public async Task Reindex_PoolsChangedDocumentsIntoOneEmbeddingRequest()
+    {
+        var result = await CreateIngestion().ReindexAsync(_product, "test", CancellationToken.None);
+
+        result.DocsChanged.ShouldBe(3);
+        _generator.Requests.ShouldBe(1, "3 documents / 6 chunks fit one batch of 50 — one request, not one per document");
+    }
+
+    [Fact]
+    public async Task Reindex_QuotaRunsOutMidway_KeepsFinishedBatchesAndResumes()
+    {
+        // Batch of 3: faq (1 chunk) + backlog (2) fill the first request; sprints (3) needs a second, which fails.
+        _generator.FailOnRequest = 2;
+        var ingestion = CreateIngestion(batchSize: 3);
+
+        await Should.ThrowAsync<SUPPORT.Application.Common.Exceptions.AssistantUnavailableException>(
+            () => ingestion.ReindexAsync(_product, "test", CancellationToken.None));
+
+        await using (var db = fixture.CreateContext())
+        {
+            (await db.KnowledgeDocuments.Where(d => d.Product == _product).Select(d => d.SourceKey).OrderBy(k => k).ToListAsync())
+                .ShouldBe(["faq", "guides/backlog"]);
+            (await db.IngestionRuns.SingleAsync(r => r.Product == _product)).Error.ShouldNotBeNull();
+        }
+
+        _generator.FailOnRequest = null;
+        var resumed = await ingestion.ReindexAsync(_product, "test", CancellationToken.None);
+        resumed.DocsChanged.ShouldBe(1, "only the document lost to the quota error is embedded again");
+    }
+
+    [Fact]
     public async Task Reindex_InvalidFile_IsSkippedNotFatal()
     {
         _folder.Write("broken.md", "no front-matter here");
@@ -121,12 +152,12 @@ public sealed class IngestionAndSearchTests(PostgresFixture fixture) : IDisposab
 
     private KnowledgeQuery Query(string text) => new(_product, Guid.NewGuid(), text, null, 5);
 
-    private EmbeddingService CreateEmbeddings() =>
-        new(_generator, Options.Create(new LlmSettings { ApiKey = "test", ProviderName = "fake" }));
+    private EmbeddingService CreateEmbeddings(int batchSize = 50) =>
+        new(_generator, Options.Create(new LlmSettings { ApiKey = "test", ProviderName = "fake", EmbeddingBatchSize = batchSize }));
 
-    private KnowledgeIngestionService CreateIngestion() => new(
+    private KnowledgeIngestionService CreateIngestion(int batchSize = 50) => new(
         new FixtureContextFactory(fixture),
-        CreateEmbeddings(),
+        CreateEmbeddings(batchSize),
         Options.Create(new KnowledgeSettings { Sources = new() { [_product] = _folder.Root } }),
         NullLogger<KnowledgeIngestionService>.Instance);
 
