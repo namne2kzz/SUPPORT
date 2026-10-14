@@ -104,15 +104,16 @@ public sealed class InternalApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Chat_OffTopicQuestion_IsDeclinedWithoutTheModel()
+    public async Task Chat_OffTopicQuestion_IsAnsweredFromGeneralKnowledge_WithoutCitations()
     {
-        _factory.Assistant.Reply = ["không được gọi"];
+        _factory.Assistant.Reply = ["Kiến thức chung."];
 
         var response = await Client(_userId).PostAsJsonAsync("/internal/v1/chat", new { message = "zzz qqq xyzzy" });
         var events = ParseSse(await response.Content.ReadAsStringAsync());
 
         events.Select(e => e.Name).ShouldBe(["meta", "delta", "done"]);
-        events[^1].Data.GetProperty("answered").GetBoolean().ShouldBeFalse();
+        events[^1].Data.GetProperty("mode").GetString().ShouldBe("general");
+        _factory.Assistant.LastRequest!.Knowledge.ShouldBeEmpty();
     }
 
     [Fact]

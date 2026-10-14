@@ -16,6 +16,7 @@ public sealed record ConversationSummaryDto(Guid Id, string Title, DateTime Last
 /// <param name="IsInterrupted">Whether the answer was cut short.</param>
 /// <param name="Rating">Caller's rating of an answer (1 / -1), or null.</param>
 /// <param name="CreatedAt">UTC creation time.</param>
+/// <param name="Mode">For answers: <c>docs</c>, <c>general</c> or <c>declined</c>; null for questions.</param>
 public sealed record MessageDto(
     Guid Id,
     string Role,
@@ -23,7 +24,8 @@ public sealed record MessageDto(
     IReadOnlyList<Citation> Citations,
     bool IsInterrupted,
     short? Rating,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? Mode);
 
 /// <summary>A page of results.</summary>
 /// <typeparam name="T">Item type.</typeparam>

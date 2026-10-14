@@ -31,6 +31,7 @@ internal sealed class GetConversationMessagesHandler(ICallerContext caller, ICon
             m.Message.Citations,
             m.Message.IsInterrupted,
             m.Rating,
-            m.Message.CreatedAt))];
+            m.Message.CreatedAt,
+            m.Message.AnswerMode is { } mode ? Chat.DTOs.ChatStreamEvent.ModeName(mode) : null))];
     }
 }

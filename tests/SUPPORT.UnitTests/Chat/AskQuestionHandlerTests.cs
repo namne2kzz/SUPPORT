@@ -34,8 +34,9 @@ public sealed class AskQuestionHandlerTests
     }
 
     [Fact]
-    public async Task NoRelevantKnowledge_DeclinesWithoutCallingTheModel()
+    public async Task NoRelevantKnowledge_GeneralOff_DeclinesWithoutCallingTheModel()
     {
+        _settings.AllowGeneralKnowledge = false;
         Hits(Hit(0.20f, fullText: false));
 
         var events = await RunAsync(new AskQuestionCommand(null, "Thời tiết hôm nay?", "/sprints"));
@@ -48,6 +49,25 @@ public sealed class AskQuestionHandlerTests
         var answer = _conversations.Messages.Single(m => m.Role == MessageRole.Assistant);
         answer.Model.ShouldBeNull();
         answer.TopScore.ShouldBe(0.20f);
+    }
+
+    [Fact]
+    public async Task NoRelevantKnowledge_AnswersFromGeneralKnowledge_WithoutCitations()
+    {
+        Hits(Hit(0.20f, fullText: false));
+        _assistant.Reply("Scrum là một framework Agile…");
+
+        var events = await RunAsync(new AskQuestionCommand(null, "Scrum là gì?", null));
+
+        _assistant.Calls.ShouldBe(1);
+        _assistant.LastRequest!.Mode.ShouldBe(AnswerMode.General);
+        _assistant.LastRequest.Knowledge.ShouldBeEmpty();
+        events.Select(e => e.Name).ShouldBe(["meta", "delta", "done"]);
+        Payload(events[^1], "mode").ShouldBe("general");
+
+        var answer = _conversations.Messages.Single(m => m.Role == MessageRole.Assistant);
+        answer.AnswerMode.ShouldBe(AnswerMode.General);
+        answer.Citations.ShouldBeEmpty();
     }
 
     [Fact]

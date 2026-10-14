@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SUPPORT.Application.Common.Exceptions;
 using SUPPORT.Application.Common.Interfaces;
+using SUPPORT.Domain.Enums;
 using SUPPORT.Infrastructure.Settings;
 
 namespace SUPPORT.Infrastructure.AI;
@@ -36,16 +37,23 @@ internal sealed class NMateAssistant(IChatClient chatClient, IOptions<LlmSetting
         var productName = _settings.ProductDisplayNames.GetValueOrDefault(request.Product, request.Product);
 
         // A new agent per answer is cheap (no I/O) and keeps the knowledge provider bound to this request only.
+        var general = request.Mode == AnswerMode.General;
+
+        // Documentation answers stay tight and literal (low temperature, short, grounded by the knowledge provider).
+        // General answers read like a normal assistant: a bit more freedom and room, and no knowledge block —
+        // there is nothing relevant to inject, and injecting weak hits would invite the model to bend them.
         var agent = new ChatClientAgent(chatClient, new ChatClientAgentOptions
         {
             Name = "NMate",
             ChatOptions = new ChatOptions
             {
-                Instructions = NMatePrompts.System(productName, request.Route),
-                Temperature = _settings.Temperature,
-                MaxOutputTokens = _settings.MaxOutputTokens,
+                Instructions = general
+                    ? NMatePrompts.General(productName, DateOnly.FromDateTime(DateTime.UtcNow))
+                    : NMatePrompts.System(productName, request.Route),
+                Temperature = general ? _settings.GeneralTemperature : _settings.Temperature,
+                MaxOutputTokens = general ? _settings.GeneralMaxOutputTokens : _settings.MaxOutputTokens,
             },
-            AIContextProviders = [new KnowledgeContextProvider(request.Knowledge)],
+            AIContextProviders = general ? [] : [new KnowledgeContextProvider(request.Knowledge)],
         }, loggerFactory);
 
         // History is passed explicitly from our own table rather than kept in an AgentSession: the conversation

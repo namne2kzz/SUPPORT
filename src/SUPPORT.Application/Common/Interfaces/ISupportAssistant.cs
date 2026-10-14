@@ -21,14 +21,19 @@ public interface ISupportAssistant
 /// <param name="Product">Product the user is asking about.</param>
 /// <param name="Question">The new question.</param>
 /// <param name="History">Earlier turns of the conversation, oldest first.</param>
-/// <param name="Knowledge">Retrieved chunks to ground the answer on.</param>
+/// <param name="Knowledge">Retrieved chunks to ground the answer on (empty in general mode).</param>
 /// <param name="Route">Screen the user is on, if known.</param>
+/// <param name="Mode">
+/// <see cref="Domain.Enums.AnswerMode.Documentation"/> answers only from <paramref name="Knowledge"/>;
+/// <see cref="Domain.Enums.AnswerMode.General"/> answers from general knowledge but must not invent product facts.
+/// </param>
 public sealed record AssistantRequest(
     string Product,
     string Question,
     IReadOnlyList<ChatTurn> History,
     IReadOnlyList<KnowledgeHit> Knowledge,
-    string? Route);
+    string? Route,
+    Domain.Enums.AnswerMode Mode = Domain.Enums.AnswerMode.Documentation);
 
 /// <summary>One earlier turn of a conversation.</summary>
 /// <param name="IsUser">True for the user's question, false for NMate's answer.</param>

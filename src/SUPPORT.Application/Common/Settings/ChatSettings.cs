@@ -25,7 +25,13 @@ public sealed class ChatSettings
     /// </remarks>
     public float MinCosineSimilarity { get; set; } = 0.60f;
 
-    /// <summary>Answer used when retrieval found nothing relevant.</summary>
+    /// <summary>
+    /// When retrieval finds nothing relevant: true → answer from the model's general knowledge (like a normal
+    /// chatbot, no citations); false → decline with <see cref="NoAnswerText"/> without calling the model.
+    /// </summary>
+    public bool AllowGeneralKnowledge { get; set; } = true;
+
+    /// <summary>Answer used when retrieval found nothing relevant and general answers are off.</summary>
     public string NoAnswerText { get; set; } =
         "Mình chưa có tài liệu về vấn đề này nên không dám trả lời bừa. Bạn thử hỏi admin của tổ chức nhé.";
 

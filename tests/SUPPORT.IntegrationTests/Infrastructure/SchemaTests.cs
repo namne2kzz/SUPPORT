@@ -101,7 +101,7 @@ public sealed class SchemaTests(PostgresFixture fixture)
         var conversation = Conversation.Start("dashboard", Guid.NewGuid(), Guid.NewGuid(), "Làm sao đóng sprint?");
         var citation = new Citation(Guid.NewGuid(), "Quản lý Sprint", "Đóng sprint", "/sprints", 0.71f);
         var answer = ConversationMessage.AssistantAnswer(conversation.Id,
-            new AssistantAnswer("Vào Sprint Planning…", [citation], "gemini", 10, 20, 1200, 0.71f, false));
+            new AssistantAnswer(AnswerMode.Documentation, "Vào Sprint Planning…", [citation], "gemini", 10, 20, 1200, 0.71f, false));
 
         await using (var db = fixture.CreateContext())
         {

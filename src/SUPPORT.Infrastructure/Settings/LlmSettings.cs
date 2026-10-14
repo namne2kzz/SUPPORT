@@ -33,6 +33,12 @@ public sealed class LlmSettings
     /// <summary>Upper bound on answer length.</summary>
     public int MaxOutputTokens { get; set; } = 600;
 
+    /// <summary>Temperature for general-knowledge answers — more natural than documentation answers.</summary>
+    public float GeneralTemperature { get; set; } = 0.7f;
+
+    /// <summary>Upper bound on general-knowledge answers (explanations and code need more room).</summary>
+    public int GeneralMaxOutputTokens { get; set; } = 1500;
+
     /// <summary>Display names per product, used in the system prompt.</summary>
     public Dictionary<string, string> ProductDisplayNames { get; set; } = new() { ["dashboard"] = "NFlow (quản lý dự án)" };
 

@@ -1,3 +1,4 @@
+using SUPPORT.Domain.Enums;
 using SUPPORT.Domain.ValueObjects;
 
 namespace SUPPORT.Application.Chat.DTOs;
@@ -25,9 +26,25 @@ public sealed record ChatStreamEvent(string Name, object Payload)
     /// <summary>Last event of a completed answer.</summary>
     /// <param name="messageId">Saved answer id (used for feedback).</param>
     /// <param name="latencyMs">Elapsed time.</param>
-    /// <param name="answered">False when NMate had no documentation and declined to answer.</param>
+    /// <param name="mode">How the answer was produced; the widget labels general answers.</param>
     /// <returns>The event.</returns>
-    public static ChatStreamEvent Done(Guid messageId, int latencyMs, bool answered) => new("done", new { messageId, latencyMs, answered });
+    public static ChatStreamEvent Done(Guid messageId, int latencyMs, AnswerMode mode) => new("done", new
+    {
+        messageId,
+        latencyMs,
+        answered = mode != AnswerMode.Declined,
+        mode = ModeName(mode),
+    });
+
+    /// <summary>Wire name of an answer mode: <c>docs</c>, <c>general</c> or <c>declined</c>.</summary>
+    /// <param name="mode">Answer mode.</param>
+    /// <returns>Lower-case name used by the widget.</returns>
+    public static string ModeName(AnswerMode mode) => mode switch
+    {
+        AnswerMode.Documentation => "docs",
+        AnswerMode.General => "general",
+        _ => "declined",
+    };
 
     /// <summary>The answer failed mid-stream; whatever was generated so far is kept.</summary>
     /// <param name="code">Machine-readable error code.</param>

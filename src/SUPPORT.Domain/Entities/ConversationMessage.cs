@@ -40,6 +40,9 @@ public sealed class ConversationMessage : Entity
     /// <summary>Whether the answer was cut short (client disconnected or provider failed mid-stream).</summary>
     public bool IsInterrupted { get; private set; }
 
+    /// <summary>How the answer was produced; null for the user's questions.</summary>
+    public AnswerMode? AnswerMode { get; private set; }
+
     private ConversationMessage() { }
 
     /// <summary>Creates the user's question.</summary>
@@ -63,10 +66,20 @@ public sealed class ConversationMessage : Entity
     /// <param name="conversationId">Owning conversation.</param>
     /// <param name="answer">Answer details.</param>
     /// <returns>The new message.</returns>
-    public static ConversationMessage AssistantAnswer(Guid conversationId, AssistantAnswer answer) => new()
+    public static ConversationMessage AssistantAnswer(Guid conversationId, AssistantAnswer answer)
+    {
+        // Citations only exist for documentation answers — a general answer listing sources would mislead the user.
+        if (answer.Mode != Enums.AnswerMode.Documentation && answer.Citations.Count > 0)
+            throw new DomainException("Only documentation answers carry citations.");
+
+        return Create(conversationId, answer);
+    }
+
+    private static ConversationMessage Create(Guid conversationId, AssistantAnswer answer) => new()
     {
         ConversationId = conversationId,
         Role = MessageRole.Assistant,
+        AnswerMode = answer.Mode,
         Content = answer.Content,
         Citations = [.. answer.Citations],
         Model = answer.Model,
@@ -87,7 +100,9 @@ public sealed class ConversationMessage : Entity
 /// <param name="LatencyMs">Elapsed time.</param>
 /// <param name="TopScore">Best retrieval similarity.</param>
 /// <param name="IsInterrupted">Whether generation was cut short.</param>
+/// <param name="Mode">How the answer was produced.</param>
 public sealed record AssistantAnswer(
+    AnswerMode Mode,
     string Content,
     IReadOnlyList<Citation> Citations,
     string? Model,

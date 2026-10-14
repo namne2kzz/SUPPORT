@@ -65,22 +65,30 @@ internal sealed class AskQuestionHandler(
             new KnowledgeQuery(caller.Product, caller.OrgId, question, module, _settings.TopK), cancellationToken);
         var topScore = hits.Max(h => h.CosineSimilarity);
 
-        if (!IsGrounded(hits, topScore))
+        // Grounded → answer from the documentation, with citations (unchanged behaviour for product questions).
+        // Not grounded → either chat like a general assistant, or decline without spending a model call.
+        var mode = IsGrounded(hits, topScore) ? AnswerMode.Documentation
+            : _settings.AllowGeneralKnowledge ? AnswerMode.General
+            : AnswerMode.Declined;
+
+        if (mode == AnswerMode.Declined)
         {
-            // Declining costs one embedding and no chat call — and never invents an answer.
             var declined = await SaveAnswerAsync(conversation, new AssistantAnswer(
-                _settings.NoAnswerText, [], null, null, null, Elapsed(stopwatch), topScore, false));
+                AnswerMode.Declined, _settings.NoAnswerText, [], null, null, null, Elapsed(stopwatch), topScore, false));
 
             yield return ChatStreamEvent.Delta(_settings.NoAnswerText);
-            yield return ChatStreamEvent.Done(declined.Id, Elapsed(stopwatch), answered: false);
+            yield return ChatStreamEvent.Done(declined.Id, Elapsed(stopwatch), AnswerMode.Declined);
             yield break;
         }
 
-        var citations = hits
+        // Weak hits are not shown as sources of a general answer: the answer did not come from them.
+        IReadOnlyList<KnowledgeHit> knowledge = mode == AnswerMode.Documentation ? hits : [];
+        var citations = knowledge
             .Select(h => new Citation(h.ChunkId, h.Title, h.HeadingPath, h.RouteHint, h.CosineSimilarity ?? 0f))
             .ToList();
         var assistantRequest = new AssistantRequest(
-            caller.Product, question, [.. history.Select(m => new ChatTurn(m.Role == MessageRole.User, m.Content))], hits, request.Route);
+            caller.Product, question, [.. history.Select(m => new ChatTurn(m.Role == MessageRole.User, m.Content))],
+            knowledge, request.Route, mode);
 
         var answer = new StringBuilder();
         int? promptTokens = null, completionTokens = null;
@@ -136,11 +144,11 @@ internal sealed class AskQuestionHandler(
             yield break;
         }
 
-        yield return ChatStreamEvent.Citations(citations);
-        yield return ChatStreamEvent.Done(saved.Id, Elapsed(stopwatch), answered: true);
+        if (citations.Count > 0) yield return ChatStreamEvent.Citations(citations);
+        yield return ChatStreamEvent.Done(saved.Id, Elapsed(stopwatch), mode);
 
         AssistantAnswer Answer(bool interrupted) => new(
-            answer.ToString(), citations, assistant.ChatModel, promptTokens, completionTokens,
+            mode, answer.ToString(), citations, assistant.ChatModel, promptTokens, completionTokens,
             Elapsed(stopwatch), topScore, interrupted);
     }
 

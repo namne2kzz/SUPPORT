@@ -30,7 +30,6 @@ namespace SUPPORT.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SUPPORT.Domain.Entities.Conversation", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -80,9 +79,12 @@ namespace SUPPORT.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SUPPORT.Domain.Entities.ConversationMessage", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<short?>("AnswerMode")
+                        .HasColumnType("smallint")
+                        .HasColumnName("answer_mode");
 
                     b.Property<string>("Citations")
                         .IsRequired()
@@ -148,7 +150,6 @@ namespace SUPPORT.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SUPPORT.Domain.Entities.IngestionRun", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -209,7 +210,6 @@ namespace SUPPORT.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SUPPORT.Domain.Entities.KnowledgeChunk", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -302,7 +302,6 @@ namespace SUPPORT.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SUPPORT.Domain.Entities.KnowledgeDocument", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
