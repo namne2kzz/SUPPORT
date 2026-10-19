@@ -1,0 +1,178 @@
+name: CD
+
+# NOT AUTOMATIC YET — runs only when triggered by hand from the Actions tab.
+# Once the secrets are in place and the pipeline has been exercised, add:
+#   push:
+#     branches: [main]
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+      push_images:
+        description: Push the image to GHCR (off = build only)
+        type: boolean
+        default: true
+      deploy:
+        description: Deploy over SSH after pushing the image
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: support-api
+
+jobs:
+  publish:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: meta
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: inputs.push_images
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # built-in token; no secret to create
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/SUPPORT.Api/Dockerfile
+          push: ${{ inputs.push_images }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha,scope=support-api
+          cache-to: type=gha,scope=support-api,mode=max
+
+      - name: Trivy scan
+        if: inputs.push_images
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          format: sarif
+          output: trivy-api.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"   # set to "1" to block the deploy on HIGH/CRITICAL findings
+
+      - name: Upload Trivy report
+        if: inputs.push_images
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api.sarif
+
+  deploy:
+    name: Deploy (${{ inputs.environment }})
+    needs: publish
+    if: inputs.deploy && inputs.push_images
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}   # add required reviewers under Settings > Environments
+    steps:
+      # Required secrets: SSH_HOST, SSH_USER, SSH_KEY, DEPLOY_PATH, HEALTH_URL
+      #
+      # The host carries docker-compose.prod.yml (renamed to docker-compose.yml, or COMPOSE_FILE set)
+      # whose api service reads its tag from .env:
+      #   api:
+      #     image: ghcr.io/namne2kzz/support-api:${SUPPORT_TAG:-latest}
+      # Rollback works by writing the previous tag back into .env and running `up -d` again.
+      #
+      # HEALTH_URL should be the readiness probe, e.g. http://127.0.0.1:8095/health/ready — it checks
+      # the database, so a container that starts but cannot reach pgvector fails the deploy.
+      #
+      # EF migrations: SUPPORT migrates at startup (Database:MigrateOnStartup). Migrations do NOT
+      # roll back — the rollback below only reverts the image, so every migration must stay
+      # backward-compatible with the preceding image (expand/contract).
+      #
+      # Knowledge files are NOT shipped here: DASHBOARD's knowledge-sync workflow copies them into the
+      # mounted folder and calls /internal/v1/knowledge/reindex. On startup the API also re-ingests
+      # (Knowledge:IngestOnStartup), which only re-embeds documents whose content hash changed.
+      - name: Deploy with rollback on failure
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          command_timeout: 15m
+          envs: NEW_TAG,HEALTH_URL
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            # ── 1. Remember the running tag so there is a way back ─────────────
+            PREV_TAG="$(grep -E '^SUPPORT_TAG=' .env | cut -d= -f2 || echo '')"
+            if [ -z "$PREV_TAG" ]; then
+              echo "No SUPPORT_TAG in .env — treating this as the first deploy; rollback unavailable."
+            else
+              echo "Current tag: $PREV_TAG"
+            fi
+            echo "Deploying tag: $NEW_TAG"
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            # ── 2. Health probe, reused by both the deploy and the rollback ────
+            wait_healthy() {
+              for i in $(seq 1 30); do
+                if curl -fsS "$HEALTH_URL" > /dev/null 2>&1; then
+                  echo "Healthy after ${i} attempt(s)."
+                  return 0
+                fi
+                echo "Waiting for the app to come up... (${i}/30)"
+                sleep 5
+              done
+              return 1
+            }
+
+            # ── 3. Rollback: restore the previous tag and bring the stack back ─
+            rollback() {
+              if [ -z "$PREV_TAG" ]; then
+                echo "::error::Deploy FAILED and there is no previous tag to fall back to. Manual recovery required."
+                exit 1
+              fi
+              echo "::warning::Deploy FAILED — rolling back to $PREV_TAG"
+              sed -i "s|^SUPPORT_TAG=.*|SUPPORT_TAG=$PREV_TAG|" .env
+              docker compose up -d --remove-orphans
+              if wait_healthy; then
+                echo "::error::Rolled back to $PREV_TAG. Build $NEW_TAG was rejected."
+              else
+                echo "::error::ROLLBACK ALSO FAILED. The service is down — manual recovery required now."
+              fi
+              exit 1
+            }
+
+            # ── 4. Deploy ──────────────────────────────────────────────────────
+            # Write the new tag: create .env if absent, append the line if missing,
+            # only then sed it. (sed -i on a missing file fails, and set -e would
+            # kill the script before the append could run.)
+            touch .env
+            grep -q '^SUPPORT_TAG=' .env || echo "SUPPORT_TAG=$NEW_TAG" >> .env
+            sed -i "s|^SUPPORT_TAG=.*|SUPPORT_TAG=$NEW_TAG|" .env
+
+            docker compose pull        || rollback
+            docker compose up -d --remove-orphans || rollback
+            wait_healthy               || rollback
+
+            echo "Deploy $NEW_TAG succeeded."
+            docker image prune -f
+        env:
+          NEW_TAG:    ${{ needs.publish.outputs.tag }}
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}

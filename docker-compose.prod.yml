@@ -1,0 +1,86 @@
+# SUPPORT (NMate) — production stack for a self-hosted Docker server.
+#
+# How this differs from docker-compose.yml (local):
+#   - Runs the API from GHCR via `image:` instead of `dotnet run` — the server needs no source
+#   - Tag comes from ${SUPPORT_TAG}, which CD writes into .env — one line to roll back
+#   - No dbgate (developer tooling); pgvector is not published on a host port
+#   - The API joins hub-net so dashboard-api reaches it as http://support-api:8080
+#
+# First-time setup on the server:
+#   mkdir -p /opt/support/knowledge/dashboard && cd /opt/support
+#   # copy this file + .env.prod.example
+#   cp .env.prod.example .env && chmod 600 .env && nano .env   # fill in real secrets
+#   docker network create hub-net               # if absent (shared with HUB + DASHBOARD)
+#   echo <GITHUB_PAT> | docker login ghcr.io -u <user> --password-stdin
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# After that CD takes over: pull → up -d → health check → rollback on failure.
+# Knowledge files arrive via DASHBOARD's knowledge-sync workflow (→ ./knowledge/dashboard).
+#
+# NOTE: CD runs plain `docker compose` without -f, so on the server rename this file
+# to `docker-compose.yml`, or export COMPOSE_FILE=docker-compose.prod.yml in the
+# deploy user's shell profile.
+
+name: support
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+  pgvector:
+    image: pgvector/pgvector:pg17
+    container_name: support-pgvector
+    environment:
+      POSTGRES_USER: "${SUPPORT_PG_USER:?required}"
+      POSTGRES_PASSWORD: "${SUPPORT_PG_PASSWORD:?required}"
+      POSTGRES_DB: support
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d support"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Application ─────────────────────────────────────────────────────────────
+  # SUPPORT_TAG is the ONLY line CD rewrites in .env.
+  # Rollback = write the previous tag back and run `up -d`.
+  api:
+    image: ghcr.io/${GHCR_OWNER:?required}/support-api:${SUPPORT_TAG:-latest}
+    container_name: support-api
+    depends_on:
+      pgvector: { condition: service_healthy }
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__Support: "Host=pgvector;Port=5432;Database=support;Username=${SUPPORT_PG_USER};Password=${SUPPORT_PG_PASSWORD}"
+      # Gemini key from https://aistudio.google.com/apikey — free tier is rate-limited per minute/day.
+      Llm__ApiKey: "${GEMINI_API_KEY:?required}"
+      # Caller allow-list for /internal/*. Must match NMATE_INTERNAL_TOKEN in DASHBOARD/.env.
+      InternalClients__0__Product: "dashboard"
+      InternalClients__0__Token:   "${NMATE_INTERNAL_TOKEN_DASHBOARD:?required}"
+      Knowledge__Sources__dashboard: "/knowledge/dashboard"
+      Chat__AllowGeneralKnowledge: "${NMATE_ALLOW_GENERAL_KNOWLEDGE:-true}"
+    volumes:
+      - ./knowledge/dashboard:/knowledge/dashboard:ro
+    # Loopback only: DASHBOARD talks to it over hub-net; the host port exists for the CD health probe
+    # and for knowledge-sync's reindex call. Never expose NMate publicly.
+    ports:
+      - "127.0.0.1:${SUPPORT_PORT:-8095}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s   # generous: migrations + startup ingestion run before the app is ready
+    restart: unless-stopped
+    networks: [default, hub-net]
+
+# hub-net is created by HUB (docker network create hub-net). All stacks join it as external.
+networks:
+  hub-net:
+    external: true
+    name: hub-net
+
+volumes:
+  pgvector-data:
