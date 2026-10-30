@@ -22,9 +22,26 @@ internal sealed class NMateAssistant(IChatClient chatClient, IOptions<LlmSetting
     : ISupportAssistant
 {
     private readonly LlmSettings _settings = settings.Value;
+    private readonly ILogger<NMateAssistant> _logger = loggerFactory.CreateLogger<NMateAssistant>();
 
     /// <inheritdoc />
     public bool IsConfigured => _settings.IsConfigured;
+
+    /// <summary>Reads a provider error's response body, which carries the real reason.</summary>
+    /// <param name="ex">The SDK exception.</param>
+    /// <returns>The body text, or a note when there is none.</returns>
+    private static string Body(ClientResultException ex)
+    {
+        try
+        {
+            return ex.GetRawResponse()?.Content?.ToString() ?? "(no body)";
+        }
+        catch
+        {
+            // Diagnostics must never add a second failure on top of the one being reported.
+            return "(body unavailable)";
+        }
+    }
 
     /// <inheritdoc />
     public string ChatModel => _settings.ChatModel;
@@ -75,10 +92,17 @@ internal sealed class NMateAssistant(IChatClient chatClient, IOptions<LlmSetting
                 }
                 catch (ClientResultException ex)
                 {
+                    // The provider's status and body are the only things that say *why* an answer failed, and
+                    // the translated exception keeps neither. Log them here, at the one place they still exist.
+                    _logger.LogError(ex,
+                        "Chat provider rejected the request: HTTP {Status}, model {Model}. Response: {Body}",
+                        ex.Status, _settings.ChatModel, Body(ex));
                     throw ProviderErrors.Translate(ex);
                 }
                 catch (HttpRequestException ex)
                 {
+                    _logger.LogError(ex, "Could not reach the chat provider at {Endpoint} for model {Model}.",
+                        _settings.Endpoint, _settings.ChatModel);
                     throw new AssistantUnavailableException(AssistantErrorCodes.Unavailable, "Không kết nối được tới model.", ex);
                 }
 

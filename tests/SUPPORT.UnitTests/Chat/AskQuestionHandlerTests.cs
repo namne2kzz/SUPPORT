@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using SUPPORT.Application.Chat.Commands.AskQuestion;
@@ -24,6 +25,7 @@ public sealed class AskQuestionHandlerTests
     private readonly FakeAssistant _assistant = new();
     private readonly IStreamGate _gate = Substitute.For<IStreamGate>();
     private readonly ICallerContext _caller = Substitute.For<ICallerContext>();
+    private readonly ILogger<AskQuestionHandler> _logger = Substitute.For<ILogger<AskQuestionHandler>>();
 
     public AskQuestionHandlerTests()
     {
@@ -165,7 +167,7 @@ public sealed class AskQuestionHandlerTests
 
     private async Task<List<ChatStreamEvent>> RunAsync(AskQuestionCommand command)
     {
-        var handler = new AskQuestionHandler(_caller, _conversations, _search, _catalog, _assistant, _gate, Options.Create(_settings));
+        var handler = new AskQuestionHandler(_caller, _conversations, _search, _catalog, _assistant, _gate, Options.Create(_settings), _logger);
         var events = new List<ChatStreamEvent>();
         await foreach (var e in handler.Handle(command, CancellationToken.None)) events.Add(e);
         return events;

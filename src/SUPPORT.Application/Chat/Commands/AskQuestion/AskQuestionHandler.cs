@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SUPPORT.Application.Chat.DTOs;
 using SUPPORT.Application.Common.Exceptions;
@@ -24,6 +25,7 @@ namespace SUPPORT.Application.Chat.Commands.AskQuestion;
 /// <param name="assistant">LLM answer generation.</param>
 /// <param name="gate">One-stream-per-user guard.</param>
 /// <param name="settings">Chat settings.</param>
+/// <param name="logger">Logger; records the provider failure behind a user-facing error message.</param>
 internal sealed class AskQuestionHandler(
     ICallerContext caller,
     IConversationRepository conversations,
@@ -31,7 +33,8 @@ internal sealed class AskQuestionHandler(
     IKnowledgeCatalog catalog,
     ISupportAssistant assistant,
     IStreamGate gate,
-    IOptions<ChatSettings> settings) : IStreamRequestHandler<AskQuestionCommand, ChatStreamEvent>
+    IOptions<ChatSettings> settings,
+    ILogger<AskQuestionHandler> logger) : IStreamRequestHandler<AskQuestionCommand, ChatStreamEvent>
 {
     private readonly ChatSettings _settings = settings.Value;
 
@@ -108,6 +111,12 @@ internal sealed class AskQuestionHandler(
                 }
                 catch (AssistantUnavailableException ex)
                 {
+                    // The user only ever sees ex.Message ("NMate đang gặp sự cố…"), which says nothing about
+                    // why. Without this the provider's own error — the status, the quota detail, the model
+                    // name it rejected — was discarded entirely, leaving nothing to diagnose from.
+                    logger.LogError(ex,
+                        "NMate answer failed for product {Product}, route {Route}, mode {Mode}: {Code}",
+                        caller.Product, request.Route, mode, ex.Code);
                     failure = ex;
                     break;
                 }

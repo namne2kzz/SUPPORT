@@ -11,11 +11,11 @@ COPY src/SUPPORT.Domain/SUPPORT.Domain.csproj                 src/SUPPORT.Domain
 COPY src/SUPPORT.Application/SUPPORT.Application.csproj       src/SUPPORT.Application/
 COPY src/SUPPORT.Infrastructure/SUPPORT.Infrastructure.csproj src/SUPPORT.Infrastructure/
 COPY src/SUPPORT.Api/SUPPORT.Api.csproj                       src/SUPPORT.Api/
-RUN --mount=type=cache,target=/root/.nuget/packages \
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet restore src/SUPPORT.Api/SUPPORT.Api.csproj
 COPY src/ src/
-RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish src/SUPPORT.Api/SUPPORT.Api.csproj -c Release -o /app/publish --no-restore
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish src/SUPPORT.Api/SUPPORT.Api.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # libgssapi-krb5-2: Npgsql probes GSSAPI at connect time and logs a warning without it.

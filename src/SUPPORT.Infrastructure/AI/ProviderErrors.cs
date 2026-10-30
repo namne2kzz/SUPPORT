@@ -15,6 +15,11 @@ internal static class ProviderErrors
             "NMate tạm hết lượt sử dụng, bạn thử lại sau ít phút nhé.", ex),
         401 or 403 => new AssistantUnavailableException(AssistantErrorCodes.Unavailable,
             "NMate chưa được cấu hình đúng API key.", ex),
+        // The provider is busy, not broken, and it clears on its own — worth telling the person so
+        // they try again instead of reporting a fault. Retries have already been spent by this point
+        // (see TransientOverloadRetryPolicy), so reaching here means the spike outlasted them.
+        502 or 503 or 504 => new AssistantUnavailableException(AssistantErrorCodes.Unavailable,
+            "NMate đang quá tải, bạn thử lại sau một chút nhé.", ex),
         _ => new AssistantUnavailableException(AssistantErrorCodes.Unavailable,
             "NMate đang gặp sự cố, bạn thử lại sau nhé.", ex),
     };

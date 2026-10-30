@@ -80,12 +80,13 @@ public static class DependencyInjection
         var llm = configuration.GetSection(LlmSettings.SectionName).Get<LlmSettings>() ?? new LlmSettings();
         var key = new ApiKeyCredential(llm.IsConfigured ? llm.ApiKey : MissingKeyPlaceholder);
 
-        // Chat: no automatic retries. The user is waiting, and on a free tier a 429 will not clear in seconds —
-        // fail fast and let the widget say "try again later".
+        // Chat: retry only a busy provider (502/503/504), never a 429. The user is waiting, and on a free
+        // tier a quota refusal will not clear in seconds — but a Gemini demand spike will, and failing
+        // those outright turned every spike into "NMate đang gặp sự cố". See TransientOverloadRetryPolicy.
         var chatOpenAi = new OpenAIClient(key, new OpenAIClientOptions
         {
             Endpoint = new Uri(llm.Endpoint),
-            RetryPolicy = new ClientRetryPolicy(maxRetries: 0),
+            RetryPolicy = new TransientOverloadRetryPolicy(),
         });
         services.AddChatClient(chatOpenAi.GetChatClient(llm.ChatModel).AsIChatClient())
             .UseOpenTelemetry();
