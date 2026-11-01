@@ -44,10 +44,10 @@ internal sealed class AskQuestionHandler(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (!assistant.IsConfigured)
-            throw new AssistantUnavailableException(AssistantErrorCodes.Unavailable, "NMate chưa được cấu hình model.");
+            throw new AssistantUnavailableException(AssistantErrorCodes.Unavailable, "NMate has no model configured.");
 
         using var lease = gate.TryAcquire($"{caller.Product}:{caller.UserId}")
-            ?? throw new ConflictException(AssistantErrorCodes.StreamInProgress, "NMate đang trả lời câu hỏi trước của bạn.");
+            ?? throw new ConflictException(AssistantErrorCodes.StreamInProgress, "NMate is still answering your previous question.");
 
         var stopwatch = Stopwatch.StartNew();
         var question = request.Message.Trim();

@@ -33,7 +33,7 @@ public sealed class ChatSettings
 
     /// <summary>Answer used when retrieval found nothing relevant and general answers are off.</summary>
     public string NoAnswerText { get; set; } =
-        "Mình chưa có tài liệu về vấn đề này nên không dám trả lời bừa. Bạn thử hỏi admin của tổ chức nhé.";
+        "I don't have documentation on this, so I'd rather not guess. Try asking your organization's admin.";
 
     /// <summary>Suggestions returned per screen.</summary>
     public int SuggestionCount { get; set; } = 4;

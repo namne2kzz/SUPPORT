@@ -13,7 +13,7 @@ internal sealed class AskQuestionValidator : AbstractValidator<AskQuestionComman
     {
         RuleFor(c => c.Message)
             .NotEmpty()
-            .Must(m => !string.IsNullOrWhiteSpace(m)).WithMessage("Câu hỏi không được để trống.")
+            .Must(m => !string.IsNullOrWhiteSpace(m)).WithMessage("The question cannot be empty.")
             .MaximumLength(settings.Value.MaxQuestionLength);
 
         RuleFor(c => c.ConversationId)

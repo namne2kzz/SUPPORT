@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using SUPPORT.Application.Chat.Commands.AskQuestion;
@@ -25,7 +26,12 @@ public sealed class AskQuestionHandlerTests
     private readonly FakeAssistant _assistant = new();
     private readonly IStreamGate _gate = Substitute.For<IStreamGate>();
     private readonly ICallerContext _caller = Substitute.For<ICallerContext>();
-    private readonly ILogger<AskQuestionHandler> _logger = Substitute.For<ILogger<AskQuestionHandler>>();
+
+    // A hand-written no-op rather than Substitute.For<ILogger<AskQuestionHandler>>(): the handler is
+    // internal, and Castle's proxy assembly — which is not covered by this project's InternalsVisibleTo —
+    // cannot build a proxy over a generic parameterised by a type it cannot see. Nothing here asserts on
+    // logging, so a stub that discards everything is all that is needed.
+    private readonly ILogger<AskQuestionHandler> _logger = NullLogger<AskQuestionHandler>.Instance;
 
     public AskQuestionHandlerTests()
     {

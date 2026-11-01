@@ -103,7 +103,7 @@ internal sealed class NMateAssistant(IChatClient chatClient, IOptions<LlmSetting
                 {
                     _logger.LogError(ex, "Could not reach the chat provider at {Endpoint} for model {Model}.",
                         _settings.Endpoint, _settings.ChatModel);
-                    throw new AssistantUnavailableException(AssistantErrorCodes.Unavailable, "Không kết nối được tới model.", ex);
+                    throw new AssistantUnavailableException(AssistantErrorCodes.Unavailable, "Could not reach the model.", ex);
                 }
 
                 if (!hasNext) yield break;
